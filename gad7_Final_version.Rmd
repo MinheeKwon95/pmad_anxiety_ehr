@@ -1,0 +1,1221 @@
+---
+title: "gad_7_0524"
+author: "Minhee Kwon"
+date: "5/24/2023"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# GAD-7 Anxiety Scale
+The GAD-7 (Generalized Anxiety Disorder 7-item) scale is a self-report questionnaire used to assess the severity of anxiety symptoms over the last two weeks. It consists of seven questions that measure the frequency of experiencing specific problems related to anxiety.
+
+Question: Over the last two weeks, how often have you been bothered by the following problems?
+
+# Scoring GAD-7 Anxiety Severity
+Each question is scored on a scale of 0 to 3, with the following response categories:
+
+- 0: Not at all
+- 1: Several days
+- 2: More than half the days
+- 3: Nearly every day
+
+# Total Score: 
+The GAD-7 total score is calculated by summing the scores from all seven questions. The total score ranges from 0 to 21.
+
+# Anxiety Severity Levels:
+GAD-7 total score for the seven items ranges from 0 to 21.
+
+- 0–4: minimal anxiety 
+- 5–9: mild anxiety
+- 10–14: moderate anxiety 
+- 15–21: severe anxiety
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+```
+
+# Data Information
+The dataset being used contains 57,823 observations (rows) and 8 variables (columns). 
+
+```{r}
+# load the data
+gad7 <- read.csv("GAD_7.csv")
+#head(gad7)
+# str(gad7) # 57823 obs. of  8 variables:
+
+# convert EMPI to a random number
+gad7$new_id <- gad7 %>% group_indices(EMPI)
+
+# drop EMPI
+gad7 <- gad7 %>%
+  select(-EMPI,-PAT_ID)
+
+
+# unique new_id : total 1532 patients
+length(unique(gad7$new_id)) : 1532
+
+# date: 2016-06-13 to 2023-02-24
+#gad7[order(gad7$created_time), ]  
+#gad7[order(gad7$created_time, decreasing = TRUE), ]
+```
+
+# UPDATED: Missing counts
+
+# Find the number of NA for each question in the GAD7
+```{r}
+# Check for missing values in QUEST_ANSWER column
+# gad7$QUEST_ANSWER -> Missing values are presented as ""
+# Please note that this code assumes that the empty strings ("") represent missing values in dataset.
+
+# vs3. Calculate the number of missing values (including empty strings) and total number of values for each question
+missing_counts <- gad7 %>%
+  group_by(QUEST_NAME) %>%
+  summarise(NA_count = sum(QUEST_ANSWER == ""),
+            Total_num = n()) %>%
+  mutate(Percentage = round(NA_count / Total_num * 100, 1))
+
+# Print the result
+print(missing_counts)
+
+# NA_count: total missing values
+# Total_num: Total response for each question (including NAs and non-NAs)
+# Percentage: calculate the percentage of missing values (NA_count) 
+
+# Plot the histogram of missing values for each question
+barplot(missing_counts$NA_count, names.arg = missing_counts$QUEST_NAME,
+        main = "Missing Values for Each Question",
+        xlab = "Question",
+        ylab = "Missing Value Count")
+
+```
+# Results of missing counts
+
+- NA_count: total missing values
+- Total_num: Total response for each question (including NAs and non-NAs)
+- Percentage: calculate the percentage of missing values (NA_count) 
+
+GAD-7 GROUP	should be filtered out since all of the responses are missing (747/747).
+Each of the questions had missing values.
+Total missing counts: 1329
+
+# Pre data work - clean the data with removing all the missing values
+Original data: 57823 obs. of  8 variables
+Filtered data: 56494 obs. of  8 variables
+"Total missing counts: 1329"
+
+# Filtering data
+```{r}
+
+# Remove rows with NA missing values("") in GAD-7 scores
+filtered_gad7 <- gad7 %>%
+  filter(QUEST_ANSWER != "")
+
+#str(filtered_gad7) # now 56494 obs. of  8 variables
+#str(gad7) # now 57823 obs. of  8 variables
+
+total_missing_counts <- 1329 # 57823 - 56494 
+print("Total missing counts: 1329")
+
+# Check points: NO missing data
+# After cleaning data: 0, Calculate the number of missing values and total number of values for each question
+missing_counts <- filtered_gad7 %>%
+  group_by(QUEST_NAME) %>%
+  summarise(NA_count = sum(QUEST_ANSWER == ""),
+            Total_num = n()) %>%
+  mutate(Percentage = round(NA_count / Total_num * 100, 1))
+
+# Print the result
+print(missing_counts)
+sum(is.na(missing_counts))
+
+# Check 2
+missing_counts2 <- filtered_gad7 %>%
+  group_by(QUEST_NAME) %>%
+  summarise(NA_count = sum(QUEST_ANSWER == "NA"),
+            Total_num = n()) %>%
+  mutate(Percentage = round(NA_count / Total_num * 100, 1))
+
+filtered_gad7 %>%
+  filter(QUEST_ANSWER == "NA")
+
+unique(filtered_gad7$QUEST_ANSWER)
+
+```
+### ISSUES with SURVEY question name discrepencies
+( 2 types of FORM_ID: 330040005,1572100 )
+
+- FORM ID: 330040005 : form_name: GENERAL ANXIETY DISORDER-7 (GAD-7) / QUEST_NAME: GAD-7 Q5 BEING SO RESTLESS THAT IT IS HARD TO SIT STILL
+
+- FROM ID: 1572100 : form_name : PSY GAD-7	/ QUEST_NAME: GAD-7 Q7
+```{r, include=FALSE}
+# Issue: 
+# form_name: GENERAL ANXIETY DISORDER-7 (GAD-7) / GAD-7 Q5 BEING SO RESTLESS THAT IT IS HARD TO SIT STILL/ 
+# created_time: 2021-12-20 09:05:00.000, 2022 / FORM_ID: 330040005 (9 digits)
+
+# form_name: PSY GAD-7	/ GAD-7 Q7	/
+# created_time: 2022, 2023, 2017, 2020 / FORM_ID : 1572100 (7 digits)
+
+# FORM_ID: 1572100 : 2020, 2018- 
+library(dplyr)
+filtered_gad7 %>%
+  filter(new_id == 39)
+
+# FORM_ID: 330040005: 2022- 2023
+filtered_gad7 %>%
+  filter(new_id == 2)
+
+### RANDOM: 330040005, 2022(one time)
+filtered_gad7 %>%
+  filter(new_id == 14)
+
+### RANDOM : 1572100, 2018, 2020-2021-2022
+filtered_gad7 %>%
+  filter(new_id == 8)
+
+### 1572100
+filtered_gad7 %>%
+  filter(new_id == 18)
+
+
+# FORMID: 1572100 (shorter version)
+filtered_gad7 %>%
+  filter(FORM_ID == 1572100) %>%
+  arrange(created_time) # Earliest created_time: 2016-06-13
+
+filtered_gad7 %>%
+  filter(FORM_ID == 1572100) %>%
+  arrange(desc(created_time)) # Latest created_time: 2023-02-24
+
+#created_time : 2016 - 2023 every year
+
+
+# FORMID: 330040005 (longer version)
+filtered_gad7 %>%
+  filter(FORM_ID == 330040005) %>%
+  arrange(created_time) # Earliest created_time: 2021-03-09
+
+filtered_gad7 %>%
+  filter(FORM_ID == 330040005) %>%
+  arrange(desc(created_time)) # Latest created_time: 2023-02-23
+
+```
+
+### UPDATED: 0705
+### UPDATE gad_7 dataset for uniformed Question name
+```{r}
+#head(filtered_gad7)
+
+### Test 
+library(dplyr)
+
+filtered_gad7_updated <- filtered_gad7 %>%
+  mutate(QUEST_NAME = case_when(
+    QUEST_NAME == "GAD-7 Q1 FEELING NERVOUS,ANXIOUS,OR ON EDGE" ~  "GAD-7 Q1",
+    QUEST_NAME == "GAD-7 Q2 NOT BEING ABLE TO STOP OR CONTROL WORRYING" ~ "GAD-7 Q2",
+    QUEST_NAME == "GAD-7 Q3 WORRYING TOO MUCH ABOUT DIFFERENT THINGS" ~ "GAD-7 Q3",
+    QUEST_NAME == "GAD-7 Q4 TROUBLE RELAXING" ~ "GAD-7 Q4",
+    QUEST_NAME == "GAD-7 Q5 BEING SO RESTLESS THAT IT IS HARD TO SIT STILL" ~ "GAD-7 Q5",
+    QUEST_NAME == "GAD-7 Q6 BECOMING EASILY ANNOYED OR IRRITABLE" ~ "GAD-7 Q6",
+    QUEST_NAME == "GAD-7 Q7 FEELING AFRAID AS IF SOMETHING AWFUL MIGHT HAPPEN" ~ "GAD-7 Q7",
+    QUEST_NAME == "GAD-7 HOW DIFFICULT HAVE THESE PROBLEMS MADE IT FOR YOU" ~ "GAD-7 Q8 HOW DIFFICULT HAVE THESE PROBLEMS MADE IT FOR YOU",
+    QUEST_NAME == "GAD-7 Q8 HOW DIFFICULT" ~ "GAD-7 Q8 HOW DIFFICULT HAVE THESE PROBLEMS MADE IT FOR YOU",
+    
+
+    # Add more cases for other names you want to change here
+    TRUE ~ QUEST_NAME  # Keep the original name if no match
+  ))
+
+
+
+# check every column name is the same 
+unique(filtered_gad7_updated$QUEST_NAME)
+
+#unique(filtered_gad7_updated$QUEST_ANSWER) #Incomplete exist
+```
+
+
+
+#  UPDATED: Histogram of GAD-7 scores after excluding rows with NA and missing values
+
+Mean score: 7.39
+Median: 6
+Standard Deviation: 5.3
+Around 20 % of patients are scored 6 and 7 in total.
+```{r}
+# updated version
+
+# Convert GAD-7 scores to numeric
+filtered_gad7_updated$QUEST_ANSWER <- as.numeric(filtered_gad7_updated$QUEST_ANSWER)
+
+# Create a histogram of GAD-7 scores
+filtered_gad7_total_scores <- filtered_gad7_updated %>% 
+  filter(QUEST_NAME == 'GAD-7 TOTAL')
+
+ggplot(filtered_gad7_total_scores, aes(x = QUEST_ANSWER)) +
+  geom_histogram(binwidth = 1, fill = "salmon", color = "black") +
+  labs(title = "Histogram of GAD-7 Scores without NAs",
+       x = "GAD-7 Score",
+       y = "Frequency")
+length(unique(filtered_gad7_total_scores$new_id)) # 1107
+sum(is.na(filtered_gad7_total_scores)) 
+na.omit(filtered_gad7_total_scores)
+sum(is.na(filtered_gad7_total_scores))
+
+# Calculate the mean score : [1] 7.39
+# Calculate the mean score and round to 2 decimal places
+mean_score <- round(mean(filtered_gad7_updated$QUEST_ANSWER, na.rm = TRUE), 2)
+mean_score
+
+# median score
+median_score <- round(median(filtered_gad7_updated$QUEST_ANSWER, na.rm = TRUE), 2)
+median_score
+
+# sd score
+sd_score <- round(sd(filtered_gad7_updated$QUEST_ANSWER, na.rm = TRUE), 2)
+sd_score
+
+# score 7: 603
+#filtered_gad7_updated %>%
+#  filter(QUEST_ANSWER == 7)
+
+# score 6: 623 ppl
+#filtered_gad7_updated %>%
+#  filter(QUEST_ANSWER == 6)
+
+filtered_gad7_updated
+na.omit(filtered_gad7_total_scores)
+
+(603 + 623)/6262 # around 20%
+```
+
+# Histogram of NA counts for each question : now 0
+```{r, include=FALSE}
+# Calculate the number of missing values and total number of values for each question
+#missing_counts <- gad7 %>%
+#  group_by(QUEST_NAME) %>%
+#  summarise(NA_count = sum(QUEST_ANSWER == ""),
+#            Total_num = n()) %>%
+#  mutate(Percentage = round(NA_count / Total_num * 100, 1))
+
+# Print the result
+print(missing_counts)
+
+# Plot the histogram of missing values for each question
+barplot(missing_counts$NA_count, names.arg = missing_counts$QUEST_NAME,
+        main = "Missing Values for Each Question",
+        xlab = "Question",
+        ylab = "Missing Value Count")
+
+```
+
+
+
+# Part 1
+
+### Calculate and analyze GAD-7 scores for patients
+The code performs various data manipulations and calculations to analyze GAD-7 scores, compare them with the provided total scores, and check the consistency of the calculations.
+```{r}
+
+
+unique(filtered_gad7_updated$QUEST_ANSWER)
+# The total number of unique patients:1524 patients
+length(unique(filtered_gad7_updated$new_id)) 
+
+# adds a new column that represents the numeric values corresponding to the response categories in the Quest Answer (0 - 3)
+# grepl
+num_gad7 <- filtered_gad7_updated %>% #56494
+  mutate(score = case_when(QUEST_ANSWER == 'Not at all' ~ 0,
+                           QUEST_ANSWER == 'Not at all sure' ~ 0,
+                                  QUEST_ANSWER == 'Several days' ~ 1,
+                                  QUEST_ANSWER == 'More than half the days' ~ 2,
+                                  QUEST_ANSWER == 'Nearly every day' ~ 3,
+                                  .default = as.numeric(QUEST_ANSWER)))
+head(num_gad7)
+
+# Check for NA values in the score variable
+na_scores <- sum(is.na(num_gad7$score))
+
+# Print the result
+#print(na_scores)
+
+filtered_gad7_updated$QUEST_ANSWER
+num_gad7$score # There are NA
+
+# shows the different question names present in the dataset.
+unique(num_gad7$QUEST_NAME)
+
+# total score : selects rows of 'GAD-7 TOTAL' but not 'GAD-7 GROUP' 
+tot_filter <- num_gad7 %>%
+  filter(QUEST_NAME == 'GAD-7 TOTAL') %>%
+  filter(QUEST_NAME != 'GAD-7 GROUP') %>% # GAD-7 GROUP has NA 
+  select(message_id, QUEST_NAME, score, new_id)
+
+
+# calculate the sum for each patient each time
+# exclude rows with 'GAD-7 TOTAL' and 'GAD-7 GROUP'
+sum_check <- num_gad7 %>%
+  filter(QUEST_NAME != 'GAD-7 TOTAL') %>%
+  filter(QUEST_NAME != 'GAD-7 GROUP') %>%
+  group_by(new_id, message_id) %>%
+  summarise(sum_num = sum(score))
+
+#tot_filter # df [6,335 × 4]
+#sum_check # 7,013 × 3
+
+# join and compare 
+joined <- tot_filter %>% # df [6,335 × 5]
+  inner_join(sum_check, by = c('new_id', 'message_id'))
+
+head(joined)
+
+# 4586 TRUE: indicating whether the calculated sum of scores matches the provided GAD-7 total score.
+table(joined$score == joined$sum_num) # all true
+```
+
+
+
+# Part 2
+Analysis and visualization of GAD-7 scores for a specific patient
+The purpose of this code section is to visualize the GAD-7 scores over time for a specific patient with a low score (minimal anxiety). By filtering the total_score dataframe, it focuses on a subset of data related to this patient and creates a scatter plot to display the trend of their GAD-7 scores over time.
+
+### patients with low score (0–4: minimal anxiety)
+```{r}
+#install.packages("ymd")
+total_score <- num_gad7 %>%
+  filter(QUEST_NAME == 'GAD-7 TOTAL') %>%
+  filter(QUEST_NAME != 'GAD-7 GROUP') %>% # GAD-7 GROUP has NA 
+  #filter(created_time > 2020) %>%
+  select(message_id, created_time, QUEST_NAME, score, new_id) 
+
+#ymd(total_score$created_time)
+
+#total_score %>%
+#  filter(score <= 4)
+# new_id = 29, 54, 73
+
+# pick a patient with low score (0–4: minimal anxiety )
+
+total_score %>%
+  filter(new_id == 54) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title = "The Patient with a Low Score",
+       x = 'Time',
+       y = 'Score')
+
+total_score %>%
+  filter(new_id == 29) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title = "The Patient with a Low Score",
+       x = 'Time',
+       y = 'Score')
+
+
+
+```
+
+### patient with mild anxiety (score: 5–9)
+```{r}
+#total_score %>%
+#  filter(score >= 5 & score <= 9)
+# new_id = 24, 42
+
+# patient with score: 5–9
+total_score %>%
+  filter(new_id == 42) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title = "The Patient with mild anxiety (score: 5-9)",
+       x = 'Time',
+       y = 'Score')
+
+total_score %>%
+  filter(new_id == 24) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title = "The Patient with mild anxiety (score: 5-9)",
+       x = 'Time',
+       y = 'Score')
+```
+
+
+# Patient with score 10–14: moderate anxiety 
+
+```{r}
+#total_score %>%
+# filter(score >= 10 & score <= 14)
+# new_id = 62, 275
+
+# patient with score 10–14: moderate anxiety 
+
+total_score %>%
+  filter(new_id == 62) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title =  "The Patient with score 10–14: moderate anxiety",
+       x = 'Time',
+       y = 'Score')
+
+total_score %>%
+  filter(new_id == 275) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title =  "The Patient with score 10–14: moderate anxiety",
+       x = 'Time',
+       y = 'Score')
+```
+
+
+# The patients with score 15–21: severe anxiety
+
+```{r}
+# total_score %>%
+# filter(score >= 15 & score <= 21)
+# new_id = 22, 25
+
+# patient with score 15–21: severe anxiety
+
+total_score %>%
+  filter(new_id == 25) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title =  "The patients with score 15–21: severe anxiety",
+       x = 'Time',
+       y = 'Score')
+
+total_score %>%
+  filter(new_id == 22) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title =  "TThe patients with score 15–21: severe anxiety",
+       x = 'Time',
+       y = 'Score')
+
+
+```
+
+
+```{r}
+#total_score %>%
+#  filter(score == 20)
+# new_id = 135, 707, 1139, 287, 437
+
+# patient with score about 20
+
+total_score %>%
+  filter(new_id == 707) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title =  "The Patient's Score About 20",
+       x = 'Time',
+       y = 'Score')
+```
+
+```{r}
+#total_score %>%
+#  filter(score > 20)
+# new_id = 95, 203, 1516, 801, 877, 1408
+
+# patient with score over 20
+
+total_score %>%
+  filter(new_id == 95) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title =  "The Patient's Score Over 20",
+       x = 'Time',
+       y = 'Score')
+
+total_score %>%
+  filter(new_id == 1516) %>%
+  ggplot(aes(x = created_time, y = score, group = new_id)) +
+  geom_line() +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title =  "The Patient's Score Over 20",
+       x = 'Time',
+       y = 'Score')
+```
+
+
+# Part 3
+The provided code performs an analysis and visualization of the initial status distribution of GAD-7 scores for patients.
+
+### Initial Status Distribution: Plot
+
+- 0–4: minimal anxiety 
+- 5–9: mild anxiety
+- 10–14: moderate anxiety 
+- 15–21: severe anxiety
+
+The purpose of this code section is to analyze and visualize the distribution of initial GAD-7 scores for patients, categorized into different anxiety levels. By filtering and summarizing the data, it determines the initial status for each patient and creates a bar plot to illustrate the distribution of patients across the different anxiety levels.
+
+
+
+
+### NEW: TEST
+```{r}
+filtered_gad7_updated <- na.omit(filtered_gad7_updated)
+filtered_gad7_updated <- filtered_gad7_updated %>%
+  filter(QUEST_ANSWER != "NA") %>%
+  filter(QUEST_ANSWER != 'Incomplete')
+
+unique(filtered_gad7_updated$QUEST_ANSWER)
+
+# To check where NAs are in
+unique(filtered_gad7_updated$QUEST_ANSWER) # NAs: Incomplete
+
+initial_status_gad7 <- filtered_gad7_updated %>%
+  group_by(new_id) %>%
+  filter(QUEST_NAME == 'GAD-7 TOTAL') %>%
+  arrange(created_time) %>%
+  filter(row_number() == 1) %>%
+  mutate(ini_status = factor(case_when(QUEST_ANSWER >= 15 & QUEST_ANSWER <= 21 ~ 'Severe anxiety',
+                                       QUEST_ANSWER >= 10 & QUEST_ANSWER <= 14 ~ 'Moderate anxiety',
+                                       QUEST_ANSWER >= 5 & QUEST_ANSWER <= 9 ~ 'Mild anxiety',
+                                       QUEST_ANSWER >= 0 & QUEST_ANSWER <= 4 ~ 'Minimal anxiety'
+  ),
+  levels = c('Minimal anxiety', 'Mild anxiety', 'Moderate anxiety', 'Severe anxiety')))
+
+# Calculate the count and percentage for each initial status category
+status_counts <- table(initial_status_gad7$ini_status)
+status_percentages <- prop.table(status_counts) * 100
+
+# Combine count and percentage in the labels
+status_labels <- paste0( " (", round(status_percentages, 1), "%)")
+
+ggplot(initial_status_gad7, aes(x = ini_status)) +
+  geom_bar() +
+  labs(x = 'Initial Status',
+    y = 'Number of Patients',
+    title = 'Initial Status Distribution') +
+  geom_text(stat = 'count', aes(label = after_stat(count)), vjust = -0.5) +
+  annotate("text", x = seq_along(status_counts), y = -20, label = status_labels, vjust = 0, size = 3, angle = 0) + ylim(0, 400) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+
+236 + 367 + 237 + 263 #1103
+```
+
+
+```{r}
+library(dplyr)
+gad7_usage_hist <- filtered_gad7_updated %>% 
+  filter(QUEST_NAME == "GAD-7 TOTAL")%>% 
+  group_by(new_id) %>% 
+  summarise(gad7_administration_per_patient = n_distinct(message_id))
+gad7_usage_hist
+hist(gad7_usage_hist$gad7_administration_per_patient, breaks = 20)
+
+# number order : 1 -56 times
+gad7_usage_hist[order(gad7_usage_hist$gad7_administration_per_patient), ]  
+gad7_usage_hist[order(gad7_usage_hist$gad7_administration_per_patient, decreasing = TRUE), ]
+
+# count number
+gad7_usage_hist %>%
+  filter(gad7_administration_per_patient == 1) # 328 ppl
+
+gad7_usage_hist %>%
+  filter(gad7_administration_per_patient == 2) # 163
+
+#gad7_usage_hist # total 1107
+
+(328+163)/1107*100 # 44.35411 %
+
+```
+
+
+### 0628
+
+```{r, include= FALSE}
+# GROUP: CODE FOR LINE GRAPH TRAJECTORIES
+# Extract the year and month
+
+library(lubridate)             
+
+initial_status_gad7$date <- ymd_hms(initial_status_gad7$created_time)
+initial_status_gad7$month <- format(as.Date(initial_status_gad7$date), "%Y-%m")
+initial_status_gad7$year <- year(initial_status_gad7$date)
+
+pre_2020_gad7 <- initial_status_gad7 %>%
+  filter(year < 2020)
+
+post_2020_gad7 <- initial_status_gad7 %>%
+  filter(year >= 2020)
+
+# Bar Plot
+pre_2020_gad7 %>%
+  group_by(ini_status, month) %>%
+  summarise(num_of_patients = n()) %>%
+  ggplot(aes(x = month, y = num_of_patients,  fill = ini_status)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = c(0.1, 0.8))
+
+
+
+# Line graph for trajectory w/ Confidence Interval 
+post_2020_gad7 %>% 
+  group_by(ini_status, month) %>% 
+  filter(QUEST_ANSWER != "Incomplete") %>%
+  mutate(QUEST_ANSWER = as.numeric(QUEST_ANSWER)) %>%
+  summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*sd(QUEST_ANSWER),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*sd(QUEST_ANSWER)) %>% 
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = ini_status, color = ini_status)) +
+  geom_line() +
+  geom_point() +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = ini_status), alpha = 0.3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = "right")
+
+
+# Line graph for trajectory no confidence interval
+post_2020_gad7 %>% 
+  group_by(ini_status, month) %>% 
+  summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*sd(QUEST_ANSWER),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*sd(QUEST_ANSWER)) %>% 
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = ini_status, color = ini_status)) +
+  geom_line(size = 1.5) +
+  geom_point(size = 3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = c(0.1, 0.8))
+
+
+
+```
+
+### MY VERSION: # Bar Plot without legend
+```{r}
+pre_2020_gad7 %>%
+  group_by(ini_status, month) %>%
+  summarise(num_of_patients = n()) %>%
+  ggplot(aes(x = month, y = num_of_patients,  fill = ini_status)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = "right")
+
+
+### Separate into 2 plots ( 2016-2017 , 2018-2019)
+
+pre_2020_gad7 %>%
+  group_by(ini_status, month) %>%
+  summarise(num_of_patients = n()) %>%
+  mutate(year_group = ifelse(month %in% c("2016-01", "2016-02", "2016-03", "2016-04", "2016-05", "2016-06", "2016-07", "2016-08", "2016-09", "2016-10", "2016-11", "2016-12", "2017-01", "2017-02", "2017-03", "2017-04", "2017-05", "2017-06", "2017-07", "2017-08", "2017-09", "2017-10", "2017-11", "2017-12"), "2016-2017", "2018-2019")) %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(legend.position = "right") +
+  facet_wrap(~year_group, scales = "free_x", ncol = 1)
+```
+
+```{r}
+#unique(post_2020_gad7$date)
+post_2020_gad7 %>%
+    filter(QUEST_ANSWER != "Incomplete") %>%
+
+  group_by(ini_status, month) %>%
+  summarise(num_of_patients = n()) %>%
+  mutate(year_group = ifelse(month %in% c("2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07", "2020-08", "2020-09", "2020-10", "2020-11", "2020-12", "2021-01", "2021-02", "2021-03", "2021-04", "2021-05", "2021-06", "2021-07", "2021-08", "2021-09", "2021-10", "2021-11", "2021-12"), "2020-2021", "2022-2023")) %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(legend.position = "right") +
+  facet_wrap(~year_group, scales = "free_x", ncol = 1)
+```
+
+
+
+
+
+### My version: Line graph for trajectory w/ Confidence Interval (without legend)
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# check 
+str(post_2020_gad7$QUEST_ANSWER)
+
+#### Without Legened
+# Line graph for trajectory no confidence interval (post 2020)
+post_2020_gad7 %>% 
+  filter(QUEST_ANSWER != "Incomplete") %>%
+  mutate(QUEST_ANSWER = as.numeric(QUEST_ANSWER)) %>%
+  group_by(ini_status, month) %>% 
+  summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*sd(QUEST_ANSWER),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*sd(QUEST_ANSWER)) %>% 
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = ini_status, color = ini_status)) +
+  geom_line(size = 1.5) +
+  geom_point(size = 3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position ="right")
+ 
+### NEW
+# Line graph for trajectory no confidence interval (pre 2020)
+library(dplyr)
+pre_2020_gad7 %>% 
+  filter(QUEST_ANSWER != "Incomplete") %>%
+  mutate(QUEST_ANSWER = as.numeric(QUEST_ANSWER)) %>%
+  group_by(ini_status, month) %>% 
+  summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*sd(QUEST_ANSWER),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*sd(QUEST_ANSWER)) %>% 
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = ini_status, color = ini_status)) +
+  geom_line(size = 1.5) +
+  geom_point(size = 3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position ="right")
+
+```
+# Line graph for trajectory w/ Confidence Interval 
+
+```{r}
+
+unique(post_2020_gad7$QUEST_ANSWER)
+# Line graph for trajectory w/ Confidence Interval 
+library(ggplot2)
+library(lubridate)
+
+# Line graph for trajectory w/ Confidence Interval (post 2020)
+post_2020_gad7 %>% 
+  group_by(ini_status, month) %>% 
+  filter(QUEST_ANSWER != "Incomplete") %>%
+  mutate(QUEST_ANSWER = as.numeric(QUEST_ANSWER)) %>%
+  summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*(sd(QUEST_ANSWER)/sqrt(n())),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*(sd(QUEST_ANSWER)/sqrt(n()))) %>%  
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = ini_status, color = ini_status)) +
+  geom_line() +
+  geom_point() +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = ini_status), alpha = 0.3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = "right")
+
+# Line graph for trajectory w/ Confidence Interval (pre 2020)
+pre_2020_gad7 %>% 
+  group_by(ini_status, month) %>% 
+  filter(QUEST_ANSWER != "Incomplete") %>%
+  mutate(QUEST_ANSWER = as.numeric(QUEST_ANSWER)) %>%
+  summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*(sd(QUEST_ANSWER)/sqrt(n())),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*(sd(QUEST_ANSWER)/sqrt(n()))) %>% 
+
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = ini_status, color = ini_status)) +
+  geom_line() +
+  geom_point() +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = ini_status), alpha = 0.3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = "right")
+```
+#Bar plot
+```{r, include=FALSE}
+library(ggplot2)
+library(dplyr)
+
+# Without legened
+pre_2020_gad7 %>%
+  group_by(ini_status, month) %>%
+  summarise(num_of_patients = n()) %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(legend.position = "none")
+
+### UPDATED VERSION: 0705
+library(ggplot2)
+
+summary_data <- pre_2020_gad7 %>%
+  group_by(ini_status, month) %>%
+  summarise(num_of_patients = n(), .groups = "drop")
+
+summary_data %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", color = "black", width = 1.5, position = position_dodge(width = 0.8)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Month", y = "Number of Patients", fill = "Initial Status") +
+  scale_fill_discrete() +
+  guides(fill = guide_legend(title = "Initial Status")) +
+  coord_cartesian(ylim = c(0, max(summary_data$num_of_patients) * 1.1)) +
+  ggtitle("Number of Patients by Month and Initial Status")
+
+### NEW with diagonal text 
+summary_data %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", color = "black", width = 1.5, position = position_dodge(width = 0.8)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 6)) +
+  labs(x = "Month", y = "Number of Patients", fill = "Initial Status") +
+  scale_fill_discrete() +
+  guides(fill = guide_legend(title = "Initial Status")) +
+  coord_cartesian(ylim = c(0, max(summary_data$num_of_patients) * 1.1)) +
+  ggtitle("Number of Patients by Month and Initial Status")
+
+### NEW NEW - wo border
+summary_data %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.9)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 6)) +
+  labs(x = "Month", y = "Number of Patients", fill = "Initial Status") +
+  scale_fill_discrete() +
+  guides(fill = guide_legend(title = "Initial Status")) +
+  coord_cartesian(ylim = c(0, max(summary_data$num_of_patients) * 1.1)) +
+  ggtitle("Number of Patients by Month and Initial Status")
+
+```
+
+```{r, include=FALSE}
+
+summary_data <- pre_2020_gad7 %>%
+  group_by(ini_status, month) %>%
+  summarise(num_of_patients = n(), .groups = "drop")
+
+### NEW NEW NEW PLOT - Separate into 2 plots
+library(lubridate)
+
+# Convert month variable to date format
+summary_data$month <- ymd(summary_data$month)
+
+# Filter data for 2016-2017
+data_2016_2017 <- summary_data %>%
+  filter(month >= ymd("2016-01-01") & month <= ymd("2017-12-31"))
+
+# Plot for 2016-2017
+plot_2016_2017 <- data_2016_2017 %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.9)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 6)) +
+  labs(x = "Month", y = "Number of Patients", fill = "Initial Status") +
+  scale_fill_discrete() +
+  guides(fill = guide_legend(title = "Initial Status")) +
+  coord_cartesian(ylim = c(0, max(data_2016_2017$num_of_patients) * 1.1)) +
+  ggtitle("Number of Patients by Month and Initial Status (2016-2017)")
+
+# Filter data for 2018-2019
+data_2018_2019 <- summary_data %>%
+  filter(month >= ymd("2018-01-01") & month <= ymd("2019-12-31"))
+
+# Plot for 2018-2019
+plot_2018_2019 <- data_2018_2019 %>%
+  ggplot(aes(x = month, y = num_of_patients, fill = ini_status)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.9)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 6)) +
+  labs(x = "Month", y = "Number of Patients", fill = "Initial Status") +
+  scale_fill_discrete() +
+  guides(fill = guide_legend(title = "Initial Status")) +
+  coord_cartesian(ylim = c(0, max(data_2018_2019$num_of_patients) * 1.1)) +
+  ggtitle("Number of Patients by Month and Initial Status (2018-2019)")
+
+# Print the two plots
+print(plot_2016_2017)
+print(plot_2018_2019)
+
+
+
+#### CHECK
+# Inspect the pre_2020_gad7 dataset
+print(pre_2020_gad7)
+str(pre_2020_gad7)
+
+# Check unique values in the month variable
+unique_dates <- unique(pre_2020_gad7$month)
+print(unique_dates)
+
+library(lubridate)
+
+# Convert month variable to date format
+summary_data$month <- as.Date(summary_data$month, format = "%Y-%m-%d")
+
+# Filter data for 2016-2017
+data_2016_2017 <- summary_data %>%
+  filter(month >= as.Date("2016-01-01") & month <= as.Date("2017-12-31"))
+
+# Print the filtered data to check if any records exist
+print(data_2016_2017)
+
+
+
+```
+
+### ISSUES with SURVEY question name difference 
+( 2 types of FORM_ID: 330040005,1572100 )
+
+- FORM ID: 330040005 : form_name: GENERAL ANXIETY DISORDER-7 (GAD-7) / QUEST_NAME: GAD-7 Q5 BEING SO RESTLESS THAT IT IS HARD TO SIT STILL
+
+- FROM ID: 1572100 : form_name : PSY GAD-7	/ QUEST_NAME: GAD-7 Q7
+SOLVED 
+
+### UPDATED: 0705
+### UPDATE gad_7 dataset for uniformed Question name
+```{r}
+head(filtered_gad7)
+
+
+### Test 
+library(dplyr)
+
+filtered_gad7_updated <- filtered_gad7 %>%
+  mutate(QUEST_NAME = case_when(
+    QUEST_NAME == "GAD-7 Q1 FEELING NERVOUS,ANXIOUS,OR ON EDGE" ~  "GAD-7 Q1",
+    QUEST_NAME == "GAD-7 Q2 NOT BEING ABLE TO STOP OR CONTROL WORRYING" ~ "GAD-7 Q2",
+    QUEST_NAME == "GAD-7 Q3 WORRYING TOO MUCH ABOUT DIFFERENT THINGS" ~ "GAD-7 Q3",
+    QUEST_NAME == "GAD-7 Q4 TROUBLE RELAXING" ~ "GAD-7 Q4",
+    QUEST_NAME == "GAD-7 Q5 BEING SO RESTLESS THAT IT IS HARD TO SIT STILL" ~ "GAD-7 Q5",
+    QUEST_NAME == "GAD-7 Q6 BECOMING EASILY ANNOYED OR IRRITABLE" ~ "GAD-7 Q6",
+    QUEST_NAME == "GAD-7 Q7 FEELING AFRAID AS IF SOMETHING AWFUL MIGHT HAPPEN" ~ "GAD-7 Q7",
+    QUEST_NAME == "GAD-7 HOW DIFFICULT HAVE THESE PROBLEMS MADE IT FOR YOU" ~ "GAD-7 Q8 HOW DIFFICULT HAVE THESE PROBLEMS MADE IT FOR YOU",
+    QUEST_NAME == "GAD-7 Q8 HOW DIFFICULT" ~ "GAD-7 Q8 HOW DIFFICULT HAVE THESE PROBLEMS MADE IT FOR YOU",
+
+    # Add more cases for other names you want to change here
+    TRUE ~ QUEST_NAME  # Keep the original name if no match
+  ))
+
+
+# check every QUEST_NAME 
+unique(filtered_gad7_updated$QUEST_NAME)
+```
+
+
+### UPDATED: 0705
+```{r}
+missing_counts_updated <- filtered_gad7_updated %>%
+  group_by(QUEST_NAME) %>%
+  summarise(NA_count = sum(QUEST_ANSWER == ""),
+            Total_num = n()) %>%
+  mutate(Percentage = round(NA_count / Total_num * 100, 1))
+
+# Print the result
+print(missing_counts_updated)
+```
+
+### UPDATE 0714
+### Prevalence
+```{r}
+filtered_gad7_updated
+
+pre_2020_gad7 <- initial_status_gad7 %>%
+  filter(year < 2020)
+
+post_2020_gad7 <- initial_status_gad7 %>%
+  filter(year >= 2020)
+
+combined_gad7 <- bind_rows(pre_2020_gad7, post_2020_gad7)
+
+
+# Prevalence Per Year : Pre 2020
+prev_per_year_gad7_pre_2020 <- pre_2020_gad7 %>% 
+  group_by(new_id, year) %>% 
+  filter(row_number() == 1) %>% 
+  group_by(year) %>% 
+  summarise(clinical_anxiety_count = sum(QUEST_ANSWER >= 10),
+            total_count = n()) %>% 
+  mutate(prevalence = round(clinical_anxiety_count/total_count, 3))
+
+prev_per_year_gad7_pre_2020 %>% 
+  ggplot(aes(x = year, y = prevalence, label = prevalence)) +
+  geom_line(size = 1, color = 'red') +
+  geom_point(color = 'red') +
+  geom_text(aes(label = prevalence, size = NULL), nudge_y = 0.015) +
+  labs(title = "Prevalence of GAD-7 by Year (GAD-7)",
+       x = "Year", y = "Prevalence") + theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+
+# Prevalence Per Year: Post 2020
+prev_per_year_gad7_post_2020 <- post_2020_gad7 %>% 
+  group_by(new_id, year) %>% 
+  filter(row_number() == 1) %>% 
+  group_by(year) %>% 
+  summarise(clinical_anxiety_count = sum(QUEST_ANSWER >= 10),
+            total_count = n()) %>% 
+  mutate(prevalence = round(clinical_anxiety_count/total_count, 3))
+
+prev_per_year_gad7_post_2020 %>% 
+  ggplot(aes(x = year, y = prevalence, label = prevalence)) +
+  geom_line(size = 1, color = 'red') +
+  geom_point(color = 'red') +
+  geom_text(aes(label = prevalence, size = NULL), nudge_y = 0.015) +
+  labs(title = "Prevalence of GAD-7 by Year (GAD-7)",
+       x = "Year", y = "Prevalence") + theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+# Prevalence Per Year: Combined (2016-2023)
+prev_per_year_gad7_combined <- combined_gad7 %>% 
+  group_by(new_id, year) %>% 
+  filter(row_number() == 1) %>% 
+  group_by(year) %>% 
+  summarise(clinical_anxiety_count = sum(QUEST_ANSWER >= 10),
+            total_count = n()) %>% 
+  mutate(prevalence = round(clinical_anxiety_count/total_count, 3))
+
+prev_per_year_gad7_combined %>% 
+  ggplot(aes(x = year, y = prevalence, label = prevalence)) +
+  geom_line(size = 1, color = 'red') +
+  geom_point(color = 'red') +
+  geom_text(aes(label = prevalence, size = NULL), nudge_y = 0.015) +
+  labs(title = "Prevalence of GAD-7 by Year",
+       x = "Year", y = "Prevalence") + theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+```
+
+
+
+### PREVALENCE of GAD-7
+```{r}
+library(anytime)
+na.omit(filtered_gad7_updated)
+
+length(unique(filtered_gad7_updated$new_id)) #1524 patients in total 
+# Calculate the baseline scores for each patient
+baseline_scores <- filtered_gad7_updated %>%
+  group_by(new_id) %>%
+  slice(1) %>%
+  filter(!is.na(QUEST_ANSWER)) %>%
+  mutate(score = ifelse(QUEST_ANSWER == "Not at all", 0,
+                        ifelse(QUEST_ANSWER == "Several days", 1,
+                               ifelse(QUEST_ANSWER == "More than half the days", 2, 3))))
+
+# 25 people who experienced baseline_score (total) is >= 10
+filtered_baseline_scores <- baseline_scores %>%
+  filter(QUEST_NAME == 'GAD-7 TOTAL') %>%
+  filter(as.numeric(QUEST_ANSWER) >= 10)
+
+prevalence <- 25/1524*100 
+# prevalence : 1.64042
+
+  
+#In this example, the prevalence would be approximately 1.64%. This means that about 1.64% of the patients in your dataset scored above 10 on their first GAD-7 administration, indicating a potential indication of clinical depression or anxiety.
+
+### TEST:################################
+library(ggplot2)
+#install.packages("anytime")
+library(anytime)
+
+# Convert the date column to the appropriate format
+filtered_baseline_scores$created_time <- anydate(filtered_baseline_scores$created_time)
+
+# Create the plot
+ggplot(filtered_baseline_scores, aes(x = created_time, y = as.numeric(QUEST_ANSWER))) +
+  geom_line() +
+  labs(x = "Date", y = "Scores") +
+  ggtitle("Filtered Baseline Scores") +
+  theme_minimal()
+#################################
+
+#prevalence plot: below is wrong
+
+# Convert the date column to the appropriate format
+filtered_baseline_scores$created_time <- anydate(filtered_baseline_scores$created_time)
+
+# Group the data by year and calculate the average proportion
+grouped_data <- filtered_baseline_scores %>%
+  group_by(year = lubridate::year(created_time)) %>%
+  summarise(average_proportion = mean(as.numeric(QUEST_ANSWER) / 1524 * 100))
+
+# Create the plot
+ggplot(grouped_data, aes(x = year, y = average_proportion)) +
+  geom_line() +
+  labs(x = "Year", y = "Average Proportion") +
+  ggtitle("Filtered Baseline Average Proportions") +
+  theme_minimal()
+
+### TRYING THIRD
+library(ggplot2)
+library(anytime)
+
+# Convert the date column to the appropriate format
+filtered_baseline_scores$created_time <- anydate(filtered_baseline_scores$created_time)
+
+# Group the data by year and calculate the count of patients above 10
+grouped_data <- filtered_baseline_scores %>%
+  group_by(year = lubridate::year(created_time)) %>%
+  summarise(count = sum(as.numeric(QUEST_ANSWER) >= 10))
+
+# Create the plot
+ggplot(grouped_data, aes(x = year, y = count)) +
+  geom_line() +
+  labs(x = "Year", y = "Count") +
+  ggtitle("Filtered Baseline Patient Counts") +
+  theme_minimal()
+
+```
+
+
+
+
+```{r}
+library(ggplot2)
+
+# Calculate prevalence and confidence interval
+prev_per_year_gad7_combined <- combined_gad7 %>%
+  group_by(new_id, year) %>%
+  filter(row_number() == 1) %>%
+  group_by(year) %>%
+  summarise(clinical_anxiety_count = sum(QUEST_ANSWER >= 10),
+            total_count = n()) %>%
+  mutate(prevalence = round(clinical_anxiety_count / total_count, 3),
+         lower_ci = prevalence - 1.96 * sqrt(prevalence * (1 - prevalence) / total_count),
+         upper_ci = prevalence + 1.96 * sqrt(prevalence * (1 - prevalence) / total_count))
+
+# Plot the line graph with confidence interval using geom_errorbar
+prev_per_year_gad7_combined %>%
+  ggplot(aes(x = year, y = prevalence)) +
+  geom_line(size = 1, color = "red") +
+  geom_point(color = "red") +
+  geom_text(aes(label = prevalence, size = NULL), nudge_y = 0.03, nudge_x = 0.1) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), color = "red", width = 0.2) +
+  labs(title = "Prevalence of GAD-7 by Year",
+       x = "Year", y = "Prevalence") +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"))
+
+```
+
+

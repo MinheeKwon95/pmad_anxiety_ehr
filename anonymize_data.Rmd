@@ -1,0 +1,73 @@
+---
+title: "Anonymize_Data"
+author: "Pranav Bhimani"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Dict)
+library(dplyr)
+library(writexl)
+library(openxlsx)
+library(tidyverse)
+library(ggplot2)
+library(UpSetR)
+```
+
+# Put new identification codes for each patient
+```{r}
+set.seed(123)
+gad <- read.csv("GAD.csv")
+phq9 <- read.csv("PHQ9.csv")
+epds <- read.csv("EPDS.csv")
+births <- read.csv("BIRTHS.csv")
+
+# COMBINE ALL OF THE EMPI INTO ONE COLUMN THEN DO THE GROUP AND INDICES THEN JOIN BACKWARDS 
+all_IDs <- unique(c(gad$EMPI, phq9$EMPI, epds$EMPI, births$Maternal_MRN))
+ID_df <- data.frame(pat_ID = all_IDs)
+ID_df <- ID_df %>%
+  arrange(pat_ID) %>% 
+  mutate(new_ID = row_number())
+
+gad_with_new_id <- gad %>% 
+  left_join(ID_df, by = join_by(EMPI == pat_ID)) %>% 
+  select(-EMPI, -PAT_ID)
+
+phq9_with_new_id <- phq9 %>% 
+  left_join(ID_df, by = join_by(EMPI == pat_ID)) %>% 
+  select(-EMPI, -PAT_ID)
+
+epds_with_new_id <- epds %>% 
+  left_join(ID_df, by = join_by(EMPI == pat_ID)) %>% 
+  select(-EMPI, -PAT_ID)
+
+births_with_new_id <- births %>% 
+  left_join(ID_df, by = join_by(Maternal_MRN == pat_ID))
+births_with_new_id$new_visit_ID <- births_with_new_id %>% group_indices(Visit_ID)
+births_with_new_id$new_neonatal_ID <- births_with_new_id %>% group_indices(Neonatal_MRN)
+
+births_with_new_id <- births_with_new_id %>% select(-Maternal_MRN, -Visit_ID, -Neonatal_MRN)
+
+write.xlsx(gad_with_new_id, file="C:/Users/pbhim/Documents/WCM/Capstone/GAD_new_id.xlsx", asTable = FALSE)
+write.xlsx(phq9_with_new_id, file="C:/Users/pbhim/Documents/WCM/Capstone/PHQ9_new_id.xlsx", asTable = FALSE)
+write.xlsx(epds_with_new_id, file="C:/Users/pbhim/Documents/WCM/Capstone/EPDS_new_id.xlsx", asTable = FALSE)
+write.xlsx(births_with_new_id, file="C:/Users/pbhim/Documents/WCM/Capstone/births_new_id.xlsx", asTable = FALSE)
+write.xlsx(ID_df, file="C:/Users/pbhim/Documents/WCM/Capstone/ID_conversion.xlsx", asTable = FALSE)
+```
+
+# Upset Plot for ID Overlap
+```{r}
+IDs = list(
+  PHQ9 = unique(phq9$EMPI),
+  GAD7 = unique(gad$EMPI),
+  EPDS = unique(epds$EMPI),
+  BIRTHS = unique(births$Maternal_MRN)
+)
+
+upset(fromList(IDs), order.by = "freq", sets.bar.color = "#56B4E9")
+```

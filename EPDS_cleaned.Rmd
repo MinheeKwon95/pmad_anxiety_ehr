@@ -1,0 +1,141 @@
+---
+title: "EPDS_edited"
+author: "Pranav Bhimani"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+```
+
+# EPDS Cleaning Process
+```{r}
+epds <- read.csv("EPDS.csv")
+# NA in EPDS
+na_epds <- epds %>% 
+  group_by(QUEST_NAME) %>% 
+  summarise(NA_count = sum(QUEST_ANSWER == "NULL")) 
+
+na_epds
+# Do histogram and line graph
+# Convert to month/year 
+total_epds_scores <- epds  %>% 
+  filter(QUEST_NAME == "EPDS SCORE")
+total_epds_scores$QUEST_ANSWER <- as.numeric(total_epds_scores$QUEST_ANSWER)
+
+hist(total_epds_scores$QUEST_ANSWER, breaks = 20,
+     main = "Total Score Distribution in EPDS",
+     xlab = "Score",
+     ylab = "Number of Entries",
+     col = "light blue")
+
+# Mean, Median, and SD for Total Scores
+mean(total_epds_scores$QUEST_ANSWER)
+median(total_epds_scores$QUEST_ANSWER)
+sd(total_epds_scores$QUEST_ANSWER)
+
+# Histogram for Number of admins per patient
+epds_usage_hist <- total_epds_scores %>% 
+  group_by(EMPI) %>% 
+  summarise(EPDS_administration_per_patient = n_distinct(message_id))
+
+hist(epds_usage_hist$EPDS_administration_per_patient, breaks = 20,
+     xlab = "Number of Administrations Per Patient", main = "Distribution of EPDS Administrations per Patient",
+     col = "light pink")
+
+# Convert to appropriate EPDS category
+total_epds_scores$category <- case_when(
+  total_epds_scores$QUEST_ANSWER <= 9 ~ "Depression Not Likely",
+  .default = "Clinical Depression"
+)
+
+
+total_epds_scores$date <- ymd_hms(total_epds_scores$created_time)
+total_epds_scores$month <- format(as.Date(total_epds_scores$date), "%Y-%m")
+total_epds_scores$year <- year(total_epds_scores$date)
+pre_2020_epds <- total_epds_scores %>% 
+  filter(year < 2020)
+post_2020_epds <- total_epds_scores %>% 
+  filter(year >= 2020)
+
+# NO PRE 2020 EPDS ONLY 2020 and after
+post_2020_epds
+
+# Bar Plot
+post_2020_epds %>% 
+  group_by(category, month) %>% 
+  summarise(num_of_patients = n()) %>% 
+  ggplot(aes(x = month, y = num_of_patients,  fill = category)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = c(0.2, 0.8)) +
+  labs(title = "Number of Patients in Each EPDS Category Per Month",
+       x = "Month", y = "Number of Patients")
+
+# Line graph for trajectory w/ Confidence Interval 
+post_2020_epds %>% 
+  group_by(category, month) %>% 
+ summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*(sd(QUEST_ANSWER)/sqrt(n())),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*(sd(QUEST_ANSWER)/sqrt(n()))) %>% 
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = category, color = category)) +
+  geom_line() +
+  geom_point() +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = category), alpha = 0.3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = c(0.13, 0.85)) +
+  labs(title = "Average Total EPDS Score Trajectory",
+       x = "Month", y = "Average Score")
+
+# Line graph for trajectory no confidence interval
+post_2020_epds %>% 
+  group_by(category, month) %>% 
+  summarise(average_score = mean(QUEST_ANSWER),
+            upper_ci = mean(QUEST_ANSWER) + 1.96*(sd(QUEST_ANSWER)/sqrt(n())),
+            lower_ci = mean(QUEST_ANSWER) - 1.96*(sd(QUEST_ANSWER)/sqrt(n()))) %>% 
+  mutate(upper_ci = coalesce(upper_ci, average_score),
+         lower_ci = coalesce(lower_ci, average_score)) %>% 
+  ggplot(aes(x = month, y = average_score,  group = category, color = category)) +
+  geom_line(size = 1.5) +
+  geom_point(size = 3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(legend.position = "none") +
+  labs(title = "Average Total EPDS Score Trajectory",
+       x = "Month", y = "Average Score")
+
+
+# Prevalence Per Year
+prev_per_year_EPDS <- post_2020_epds %>% 
+  group_by(EMPI, year) %>% 
+  filter(row_number() == 1) %>% 
+  group_by(year) %>% 
+  summarise(clinical_depression_count = sum(QUEST_ANSWER >= 10),
+            total_count = n()) %>% 
+  mutate(prevalence = round(clinical_depression_count/total_count, 3),
+        lower_ci = prevalence - 1.96 * sqrt(prevalence * (1 - prevalence) / total_count),
+        upper_ci = prevalence + 1.96 * sqrt(prevalence * (1 - prevalence) / total_count))
+
+  
+
+prev_per_year_EPDS %>% 
+  ggplot(aes(x = year, y = prevalence, label = prevalence)) +
+  geom_line(size = 1, color = 'red') +
+  geom_point(color = 'red') +
+  geom_text(aes(label = prevalence, size = NULL), nudge_y = 0.03, nudge_x = 0.1) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), color = "red", width = 0.2) +
+  labs(title = "Prevalence of Depression by Year (EPDS)",
+       x = "Year", y = "Prevalence") + theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+
+prev_per_year_EPDS
+```
